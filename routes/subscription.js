@@ -382,4 +382,229 @@ router.get('/check-permissions', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /v1/subscription/cashier/create - Create a cashier account (for owners only)
+router.post('/cashier/create', authenticateToken, async (req, res) => {
+  try {
+    const { full_name, email, phone, username, password } = req.body;
+    const userId = req.user.userId;
+
+    // Verify the requesting user is an OWNER (business owner)
+    const userResult = await query(
+      'SELECT id, tenant_id, role FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.role !== 'OWNER') {
+      return res.status(403).json({
+        error: req.t('subscription.insufficient_permissions') || 'Only business owners can create cashier accounts'
+      });
+    }
+
+    // Check subscription permissions to see if user can create more cashiers
+    const permissionCheck = await query(
+      `SELECT
+         sp.max_cashiers,
+         COUNT(u.id) as current_cashiers
+       FROM subscription_plans sp
+       JOIN user_subscriptions us ON us.plan_id = sp.id
+       LEFT JOIN users u ON u.tenant_id = us.tenant_id AND u.role = 'CASHIER' AND u.status != 'DELETED' AND u.soft_delete = FALSE
+       WHERE us.user_id = $1 AND us.status = 'ACTIVE' AND us.soft_delete = FALSE
+       GROUP BY sp.max_cashiers`,
+      [userId]
+    );
+
+    if (permissionCheck.rows.length === 0) {
+      return res.status(400).json({
+        error: req.t('subscription.subscription_error') || 'No active subscription found'
+      });
+    }
+
+    const { max_cashiers, current_cashiers } = permissionCheck.rows[0];
+
+    if (current_cashiers >= max_cashiers) {
+      return res.status(403).json({
+        error: req.t('subscription.max_cashiers_reached') || 'Maximum cashier limit reached for your subscription plan'
+      });
+    }
+
+    // Check for conflicts - verify email/phone/username don't already exist
+    let conflictCheck;
+    if (email) {
+      conflictCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
+      if (conflictCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.email_exists') || 'Email already registered'
+        });
+      }
+    }
+
+    if (phone) {
+      conflictCheck = await query('SELECT id FROM users WHERE phone = $1', [phone]);
+      if (conflictCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.phone_exists') || 'Phone number already registered'
+        });
+      }
+    }
+
+    if (username) {
+      conflictCheck = await query('SELECT id FROM users WHERE username = $1', [username]);
+      if (conflictCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.username_exists') || 'Username already taken'
+        });
+      }
+    }
+
+    // Hash the password if provided
+    let hashedPassword = null;
+    if (password) {
+      const saltRounds = 10;
+      hashedPassword = await bcrypt.hash(password, saltRounds);
+    }
+
+    // Create the cashier account
+    const cashierResult = await query(
+      `INSERT INTO users (
+         id, tenant_id, role, full_name, email, phone, username, password_hash
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, full_name, email, phone, username, role, created_at`,
+      [
+        uuidv4(),
+        user.tenant_id, // Same tenant as the owner
+        'CASHIER',
+        full_name,
+        email || null,
+        phone || null,
+        username || null,
+        hashedPassword
+      ]
+    );
+
+    res.json({
+      message: req.t('auth.register_success') || 'Cashier account created successfully',
+      cashier: cashierResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Error creating cashier account:', error);
+    res.status(500).json({
+      error: req.t('auth.register_error') || 'Failed to create cashier account',
+      details: error.message
+    });
+  }
+});
+
+// GET /v1/subscription/cashiers - Get all cashier accounts for the tenant
+router.get('/cashiers', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get user's tenant_id
+    const userResult = await query(
+      'SELECT tenant_id, role FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const { tenant_id, role } = userResult.rows[0];
+
+    // Only owners can view all cashiers
+    if (role !== 'OWNER') {
+      return res.status(403).json({
+        error: req.t('subscription.insufficient_permissions') || 'Only business owners can view cashier accounts'
+      });
+    }
+
+    // Get all cashiers for the tenant
+    const cashiersResult = await query(
+      `SELECT
+         id, full_name, email, phone, username, role, created_at, updated_at
+       FROM users
+       WHERE tenant_id = $1 AND role = 'CASHIER'
+       ORDER BY created_at DESC`,
+      [tenant_id]
+    );
+
+    res.json({
+      message: req.t('auth.profile_info') || 'Cashiers retrieved successfully',
+      cashiers: cashiersResult.rows
+    });
+  } catch (error) {
+    console.error('Error fetching cashiers:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Failed to fetch cashiers',
+      details: error.message
+    });
+  }
+});
+
+// DELETE /v1/subscription/cashier/:id - Delete a cashier account (owners only)
+router.delete('/cashier/:cashierId', authenticateToken, async (req, res) => {
+  try {
+    const { cashierId } = req.params;
+    const userId = req.user.userId;
+
+    // Get user info
+    const userResult = await query(
+      'SELECT tenant_id, role FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const { tenant_id, role } = userResult.rows[0];
+
+    if (role !== 'OWNER') {
+      return res.status(403).json({
+        error: req.t('subscription.insufficient_permissions') || 'Only business owners can delete cashier accounts'
+      });
+    }
+
+    // Verify cashier belongs to the same tenant
+    const cashierResult = await query(
+      'SELECT id, role FROM users WHERE id = $1 AND tenant_id = $2 AND role = $3',
+      [cashierId, tenant_id, 'CASHIER']
+    );
+
+    if (cashierResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.profile_error') || 'Cashier not found or does not belong to your store'
+      });
+    }
+
+    // Soft delete the cashier account
+    await query(
+      'UPDATE users SET status = $1, soft_delete = $2 WHERE id = $3',
+      ['DELETED', true, cashierId]
+    );
+
+    res.json({
+      message: req.t('auth.profile_updated') || 'Cashier account deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting cashier account:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Failed to delete cashier account',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;
