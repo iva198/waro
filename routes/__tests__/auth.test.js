@@ -194,6 +194,91 @@ describe('Authentication API Endpoints', () => {
     });
   });
 
+  describe('POST /v1/auth/smart-login', () => {
+    test('should login with email and password successfully', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `smartlogin_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Smart Login User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register the user first
+      await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      // Login using smart login with email and password
+      const response = await request(app)
+        .post('/v1/auth/smart-login')
+        .send({
+          input: newUser.email,
+          password: 'testpassword123'
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user.email).toBe(newUser.email);
+      expect(response.body.message).toContain('Login berhasil'); // Indonesian for 'Login successful'
+    });
+
+    test('should return error for non-existent email', async () => {
+      const response = await request(app)
+        .post('/v1/auth/smart-login')
+        .send({
+          input: 'nonexistent@example.com',
+          password: 'somepassword'
+        })
+        .expect(401);
+
+      expect(response.body.error).toContain('Email, username, atau password salah'); // Indonesian for 'Account does not exist'
+    });
+
+    test('should return error for invalid credentials', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `invalidcred_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Invalid Cred User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register the user first
+      await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      // Try to login with wrong password
+      const response = await request(app)
+        .post('/v1/auth/smart-login')
+        .send({
+          input: newUser.email,
+          password: 'wrongpassword'
+        })
+        .expect(401);
+
+      expect(response.body.error).toContain('Email, username, atau password salah'); // Indonesian for 'Invalid credentials'
+    });
+
+    test('should return error for missing password when using email', async () => {
+      const response = await request(app)
+        .post('/v1/auth/smart-login')
+        .send({
+          input: 'test@example.com'
+          // No password provided
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('password required for email login');
+    });
+  });
+
   describe('POST /v1/auth/otp', () => {
     test('should send OTP to phone number', async () => {
       const phoneData = {

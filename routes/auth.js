@@ -71,18 +71,53 @@ const validateRegister = (req, res, next) => {
   next();
 };
 
+// Function to detect input type
+const detectInputType = (input) => {
+  if (!input) return null;
+
+  // Check if it's an email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (emailRegex.test(input)) return 'email';
+
+  // Check if it's an Indonesian phone number
+  const phoneRegex = /^(\+62|0)[2-9]\d{7,14}$/;
+  if (phoneRegex.test(input)) return 'phone';
+
+  // If it contains @, it's likely intended to be an email
+  if (input.includes('@')) return 'email';
+
+  // Otherwise assume it's a username
+  return 'username';
+};
+
 const validateLogin = (req, res, next) => {
-  const { email, username, phone, password } = req.body;
+  const { email, username, phone, password, input } = req.body;
+
+  // If 'input' is provided, detect what type it is
+  if (input) {
+    const inputType = detectInputType(input);
+
+    if (inputType === 'email') {
+      req.body.email = input;
+      req.body.login_type = 'email';
+    } else if (inputType === 'phone') {
+      req.body.phone = input;
+      req.body.login_type = 'phone';
+    } else if (inputType === 'username') {
+      req.body.username = input;
+      req.body.login_type = 'username';
+    }
+  }
 
   // At least one identifier is required
   if (!email && !username && !phone) {
     return res.status(400).json({
-      error: req.t('validation.required') + ': email, username, or phone'
+      error: req.t('validation.required') + ': email, username, or phone (or input field)'
     });
   }
 
   // Password is required for password-based login
-  if (!password) {
+  if (!password && (email || username)) {
     return res.status(400).json({
       error: req.t('validation.required') + ': password'
     });
@@ -425,6 +460,398 @@ router.post('/google', async (req, res) => {
     console.error('Error with Google login:', error);
     res.status(500).json({
       error: req.t('auth.google_login_failed') || 'Google login failed',
+      details: error.message
+    });
+  }
+});
+
+// POST /v1/auth/smart-login - Smart login that detects input type automatically
+router.post('/smart-login', async (req, res) => {
+  try {
+    const { input, password, otp, credential } = req.body;
+
+    if (!input && !credential) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': input or credential required'
+      });
+    }
+
+    // If credential is provided, assume it's Google login
+    if (credential) {
+      // Forward to Google login logic
+      if (!client) {
+        return res.status(500).json({
+          error: req.t('auth.google_login_failed') || 'Google authentication not configured'
+        });
+      }
+
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: credential,
+          audience: CLIENT_ID,
+        });
+
+        const payload = ticket.getPayload();
+        const googleId = payload['sub'];
+        const email = payload['email'];
+        const full_name = payload['name'];
+        const picture = payload['picture'];
+
+        // Check if user already exists with this Google ID
+        let userResult = await query(
+          'SELECT id, tenant_id, full_name, email, username, phone, role, status FROM users WHERE google_id = $1',
+          [googleId]
+        );
+
+        let user;
+        let isNewUser = false;
+
+        if (userResult.rows.length === 0) {
+          // Check if email already exists with another account
+          const existingEmailResult = await query(
+            'SELECT id FROM users WHERE email = $1',
+            [email]
+          );
+
+          if (existingEmailResult.rows.length > 0) {
+            return res.status(409).json({
+              error: req.t('auth.email_exists') || 'Email already registered with another account'
+            });
+          }
+
+          // Create new user if doesn't exist
+          const userId = uuidv4();
+          const tenantId = uuidv4();
+
+          userResult = await query(
+            `INSERT INTO users (
+              id, tenant_id, role, full_name, email, google_id
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, tenant_id, full_name, email, username, phone, role, created_at`,
+            [userId, tenantId, 'OWNER', full_name, email, googleId]
+          );
+
+          // Create a default store for the new user
+          await query(
+            `INSERT INTO stores (
+              id, tenant_id, name
+            ) VALUES ($1, $2, $3)`,
+            [uuidv4(), tenantId, `${full_name}'s Store`]
+          );
+
+          user = userResult.rows[0];
+          isNewUser = true;
+        } else {
+          user = userResult.rows[0];
+
+          // Update user info from Google if needed
+          await query(
+            `UPDATE users SET
+              full_name = $1,
+              email = $2
+             WHERE google_id = $3`,
+            [full_name, email, googleId]
+          );
+        }
+
+        // Check if user account is active
+        if (user.status !== 'ACTIVE') {
+          return res.status(401).json({
+            error: req.t('auth.account_inactive') || 'Account is inactive'
+          });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+          {
+            userId: user.id,
+            tenantId: user.tenant_id,
+            email: user.email,
+            googleId: googleId
+          },
+          process.env.JWT_SECRET || 'fallback_secret_key',
+          { expiresIn: '24h' }
+        );
+
+        // Get store information for the user
+        const storeResult = await query(
+          `SELECT id, name, address, created_at
+           FROM stores WHERE tenant_id = $1`,
+          [user.tenant_id]
+        );
+
+        return res.json({
+          message: req.t('auth.login_success') || 'Login successful',
+          token,
+          user: {
+            id: user.id,
+            tenant_id: user.tenant_id,
+            full_name: user.full_name,
+            email: user.email,
+            phone: user.phone,
+            username: user.username,
+            role: user.role
+          },
+          store: storeResult.rows[0] || null,
+          isNewUser: isNewUser
+        });
+      } catch (error) {
+        console.error('Error with Google login:', error);
+        return res.status(401).json({
+          error: req.t('auth.google_login_failed') || 'Invalid Google credential'
+        });
+      }
+    }
+
+    // If input is provided, detect its type and handle accordingly
+    if (input) {
+      const inputType = detectInputType(input);
+
+      if (inputType === 'email') {
+        // Email login requires password
+        if (!password) {
+          return res.status(400).json({
+            error: req.t('validation.required') + ': password required for email login'
+          });
+        }
+
+        // Login with email and password
+        const userResult = await query(
+          `SELECT id, tenant_id, full_name, email, username, phone, password_hash, role, status
+           FROM users WHERE email = $1`,
+          [input]
+        );
+
+        if (userResult.rows.length === 0) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'Account does not exist'
+          });
+        }
+
+        const user = userResult.rows[0];
+
+        // Check if user account is active
+        if (user.status !== 'ACTIVE') {
+          return res.status(401).json({
+            error: req.t('auth.account_inactive') || 'Account is inactive'
+          });
+        }
+
+        // Check if user has a password (for password-based login)
+        if (!user.password_hash) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'No password set for this account'
+          });
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'Invalid credentials'
+          });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+          {
+            userId: user.id,
+            tenantId: user.tenant_id,
+            email: user.email,
+            phone: user.phone,
+            username: user.username
+          },
+          process.env.JWT_SECRET || 'fallback_secret_key',
+          { expiresIn: '24h' }
+        );
+
+        // Get store information for the user
+        const storeResult = await query(
+          `SELECT id, name, address, created_at
+           FROM stores WHERE tenant_id = $1`,
+          [user.tenant_id]
+        );
+
+        return res.json({
+          message: req.t('auth.login_success') || 'Login successful',
+          token,
+          user: {
+            id: user.id,
+            tenant_id: user.tenant_id,
+            full_name: user.full_name,
+            email: user.email,
+            phone: user.phone,
+            username: user.username,
+            role: user.role
+          },
+          store: storeResult.rows[0] || null
+        });
+      }
+      else if (inputType === 'phone') {
+        // Phone login either with OTP or password
+        if (otp) {
+          // Verify OTP
+          const userResult = await query(
+            `SELECT id, tenant_id, full_name, email, username, phone, role, status
+             FROM users WHERE phone = $1 AND phone_verification_code = $2 AND phone_verification_expires > NOW()`,
+            [input, otp]
+          );
+
+          if (userResult.rows.length === 0) {
+            return res.status(401).json({
+              error: req.t('auth.invalid_otp') || 'Invalid or expired OTP'
+            });
+          }
+
+          const user = userResult.rows[0];
+
+          // Check if user account is active
+          if (user.status !== 'ACTIVE') {
+            return res.status(401).json({
+              error: req.t('auth.account_inactive') || 'Account is inactive'
+            });
+          }
+
+          // Clear the OTP after successful verification
+          await query(
+            `UPDATE users SET
+              phone_verification_code = NULL,
+              phone_verification_expires = NULL
+             WHERE phone = $1`,
+            [input]
+          );
+
+          // Generate JWT token
+          const token = jwt.sign(
+            {
+              userId: user.id,
+              tenantId: user.tenant_id,
+              email: user.email,
+              phone: user.phone,
+              username: user.username
+            },
+            process.env.JWT_SECRET || 'fallback_secret_key',
+            { expiresIn: '24h' }
+          );
+
+          // Get store information for the user
+          const storeResult = await query(
+            `SELECT id, name, address, created_at
+             FROM stores WHERE tenant_id = $1`,
+            [user.tenant_id]
+          );
+
+          return res.json({
+            message: req.t('auth.login_success') || 'Login successful',
+            token,
+            user: {
+              id: user.id,
+              tenant_id: user.tenant_id,
+              full_name: user.full_name,
+              email: user.email,
+              phone: user.phone,
+              username: user.username,
+              role: user.role
+            },
+            store: storeResult.rows[0] || null
+          });
+        } else {
+          // If no OTP provided, user needs to get OTP first
+          return res.status(400).json({
+            error: req.t('validation.required') + ': OTP required for phone login. Please send OTP first.'
+          });
+        }
+      }
+      else if (inputType === 'username') {
+        // Username login requires password
+        if (!password) {
+          return res.status(400).json({
+            error: req.t('validation.required') + ': password required for username login'
+          });
+        }
+
+        // Login with username and password
+        const userResult = await query(
+          `SELECT id, tenant_id, full_name, email, username, phone, password_hash, role, status
+           FROM users WHERE username = $1`,
+          [input]
+        );
+
+        if (userResult.rows.length === 0) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'Account does not exist'
+          });
+        }
+
+        const user = userResult.rows[0];
+
+        // Check if user account is active
+        if (user.status !== 'ACTIVE') {
+          return res.status(401).json({
+            error: req.t('auth.account_inactive') || 'Account is inactive'
+          });
+        }
+
+        // Check if user has a password (for password-based login)
+        if (!user.password_hash) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'No password set for this account'
+          });
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+          return res.status(401).json({
+            error: req.t('auth.invalid_credentials') || 'Invalid credentials'
+          });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+          {
+            userId: user.id,
+            tenantId: user.tenant_id,
+            email: user.email,
+            phone: user.phone,
+            username: user.username
+          },
+          process.env.JWT_SECRET || 'fallback_secret_key',
+          { expiresIn: '24h' }
+        );
+
+        // Get store information for the user
+        const storeResult = await query(
+          `SELECT id, name, address, created_at
+           FROM stores WHERE tenant_id = $1`,
+          [user.tenant_id]
+        );
+
+        return res.json({
+          message: req.t('auth.login_success') || 'Login successful',
+          token,
+          user: {
+            id: user.id,
+            tenant_id: user.tenant_id,
+            full_name: user.full_name,
+            email: user.email,
+            phone: user.phone,
+            username: user.username,
+            role: user.role
+          },
+          store: storeResult.rows[0] || null
+        });
+      }
+    }
+
+    return res.status(400).json({
+      error: req.t('validation.invalidFormat') + ': Unrecognized input format'
+    });
+
+  } catch (error) {
+    console.error('Error in smart login:', error);
+    res.status(500).json({
+      error: req.t('auth.login_error') || 'Login failed',
       details: error.message
     });
   }
