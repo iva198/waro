@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const { authenticateToken } = require('../middleware/auth');
 
 // Middleware for input validation
 const validateRegister = (req, res, next) => {
@@ -1182,7 +1183,7 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // POST /v1/auth/change-password - Change password for logged in user
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', authenticateToken, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
 
@@ -1260,8 +1261,291 @@ router.post('/change-password', async (req, res) => {
   }
 });
 
+// PUT /v1/auth/profile - Update user profile information
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    // Extract user info from token (assuming middleware that verifies token is in place)
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Authentication required'
+      });
+    }
+
+    const { full_name, phone, email, username } = req.body;
+
+    // Get the current user data
+    const userResult = await query(
+      'SELECT id, tenant_id FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Build dynamic update query based on provided fields
+    let updateFields = [];
+    let updateParams = [];
+    let paramIndex = 1;
+
+    if (full_name) {
+      updateFields.push(`full_name = $${paramIndex}`);
+      updateParams.push(full_name);
+      paramIndex++;
+    }
+
+    if (phone) {
+      // Validate phone number format (Indonesian format)
+      const phoneRegex = /^(\+62|0)[2-9]\d{7,14}$/;
+      if (!phoneRegex.test(phone)) {
+        return res.status(400).json({
+          error: req.t('validation.invalidFormat') + ': phone'
+        });
+      }
+
+      // Check if phone already exists (if different from current phone)
+      const existingUser = await query(
+        'SELECT id FROM users WHERE phone = $1 AND id != $2',
+        [phone, req.user.userId]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.phone_exists') || 'Phone number already registered'
+        });
+      }
+
+      updateFields.push(`phone = $${paramIndex}`);
+      updateParams.push(phone);
+      paramIndex++;
+    }
+
+    if (email) {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          error: req.t('validation.invalidFormat') + ': email'
+        });
+      }
+
+      // Check if email already exists (if different from current email)
+      const existingUser = await query(
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [email, req.user.userId]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.email_exists') || 'Email already registered'
+        });
+      }
+
+      updateFields.push(`email = $${paramIndex}`);
+      updateParams.push(email);
+      paramIndex++;
+    }
+
+    if (username) {
+      // Check if username already exists (if different from current username)
+      const existingUser = await query(
+        'SELECT id FROM users WHERE username = $1 AND id != $2',
+        [username, req.user.userId]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({
+          error: req.t('auth.username_exists') || 'Username already taken'
+        });
+      }
+
+      updateFields.push(`username = $${paramIndex}`);
+      updateParams.push(username);
+      paramIndex++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': At least one field to update'
+      });
+    }
+
+    // Add the user ID as the last parameter
+    updateParams.push(req.user.userId);
+    const finalParamIndex = paramIndex;
+
+    // Update the user
+    await query(
+      `UPDATE users SET ${updateFields.join(', ')}, updated_at = NOW() WHERE id = $${finalParamIndex}`,
+      updateParams
+    );
+
+    // Get updated user data to return
+    const updatedUserResult = await query(
+      `SELECT id, tenant_id, full_name, email, username, phone, role, created_at, updated_at
+       FROM users WHERE id = $1`,
+      [req.user.userId]
+    );
+
+    res.json({
+      message: req.t('auth.profile_updated') || 'Profile updated successfully',
+      user: updatedUserResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Profile update failed',
+      details: error.message
+    });
+  }
+});
+
+// PUT /v1/auth/profile-picture - Update profile picture
+router.put('/profile-picture', authenticateToken, async (req, res) => {
+  try {
+    // Extract user info from token (assuming middleware that verifies token is in place)
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Authentication required'
+      });
+    }
+
+    // In a real implementation, you would handle file upload here
+    // For this implementation, we'll simulate accepting a URL or base64 encoded image
+    const { picture_url } = req.body;
+
+    if (!picture_url) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': picture_url'
+      });
+    }
+
+    // Validate that it's a proper URL or base64 encoded image
+    const urlRegex = /^(https?:\/\/|data:image\/).+/i;
+    if (!urlRegex.test(picture_url)) {
+      return res.status(400).json({
+        error: req.t('validation.invalidFormat') + ': picture_url must be a valid URL or base64 encoded image'
+      });
+    }
+
+    // Update the user's profile picture
+    await query(
+      `UPDATE users SET profile_picture = $1, updated_at = NOW() WHERE id = $2`,
+      [picture_url, req.user.userId]
+    );
+
+    res.json({
+      message: req.t('auth.profile_picture_updated') || 'Profile picture updated successfully',
+      picture_url
+    });
+  } catch (error) {
+    console.error('Error updating profile picture:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Profile picture update failed',
+      details: error.message
+    });
+  }
+});
+
+// PUT /v1/auth/store - Update store information
+router.put('/store', authenticateToken, async (req, res) => {
+  try {
+    // Extract user info from token (assuming middleware that verifies token is in place)
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Authentication required'
+      });
+    }
+
+    const { name, address, business_type } = req.body;
+
+    // Get the user's tenant_id to identify their store
+    const userResult = await query(
+      'SELECT tenant_id FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const tenantId = userResult.rows[0].tenant_id;
+
+    // Build dynamic update query based on provided fields
+    let updateFields = [];
+    let updateParams = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updateFields.push(`name = $${paramIndex}`);
+      updateParams.push(name);
+      paramIndex++;
+    }
+
+    if (address) {
+      updateFields.push(`address = $${paramIndex}`);
+      updateParams.push(address);
+      paramIndex++;
+    }
+
+    if (business_type) {
+      // Validate business type
+      const validBusinessTypes = ['RETAIL', 'FOOD_BEVERAGE', 'SERVICES', 'MANUFACTURING_CRAFT', 'HYBRID'];
+      if (!validBusinessTypes.includes(business_type)) {
+        return res.status(400).json({
+          error: req.t('validation.invalidFormat') + ': business_type must be one of ' + validBusinessTypes.join(', ')
+        });
+      }
+
+      updateFields.push(`business_type = $${paramIndex}`);
+      updateParams.push(business_type);
+      paramIndex++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': At least one field to update'
+      });
+    }
+
+    // Add the tenant ID as the last parameter
+    updateParams.push(tenantId);
+    const finalParamIndex = paramIndex;
+
+    // Update the store
+    await query(
+      `UPDATE stores SET ${updateFields.join(', ')}, updated_at = NOW() WHERE tenant_id = $${finalParamIndex}`,
+      updateParams
+    );
+
+    // Get updated store data to return
+    const updatedStoreResult = await query(
+      `SELECT id, name, address, business_type, created_at, updated_at
+       FROM stores WHERE tenant_id = $1`,
+      [tenantId]
+    );
+
+    res.json({
+      message: req.t('auth.store_updated') || 'Store information updated successfully',
+      store: updatedStoreResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating store:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Store update failed',
+      details: error.message
+    });
+  }
+});
+
 // DELETE /v1/auth/account - Delete user account
-router.delete('/account', async (req, res) => {
+router.delete('/account', authenticateToken, async (req, res) => {
   try {
     // Extract user info from token (assuming middleware that verifies token is in place)
     if (!req.user || !req.user.userId) {

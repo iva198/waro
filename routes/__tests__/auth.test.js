@@ -363,4 +363,132 @@ describe('Authentication API Endpoints', () => {
       expect(response.body.error).toContain('Kolom ini wajib diisi');
     });
   });
+
+  describe('PUT /v1/auth/profile', () => {
+    test('should update user profile successfully', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `profile_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Profile User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register and login the user first
+      const registerResponse = await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      const token = registerResponse.body.token;
+
+      // Update profile
+      const response = await request(app)
+        .put('/v1/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          full_name: `Updated Profile User ${randomSuffix}`,
+          phone: `+62812345${String(Date.now() - 1000).slice(-6)}` // Different phone
+        })
+        .expect(200);
+
+      expect(response.body.message).toBe('Profil berhasil diperbarui');
+      expect(response.body.user.full_name).toBe(`Updated Profile User ${randomSuffix}`);
+    });
+
+    test('should return error for invalid phone format', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `profile_invalid_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Profile Invalid User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register and login the user first
+      const registerResponse = await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      const token = registerResponse.body.token;
+
+      // Try to update with invalid phone
+      const response = await request(app)
+        .put('/v1/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          phone: 'invalid-phone'
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('Format tidak valid');
+    });
+  });
+
+  describe('PUT /v1/auth/store', () => {
+    test('should update store information successfully', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `store_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Store User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register and login the user first
+      const registerResponse = await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      const token = registerResponse.body.token;
+
+      // Update store
+      const response = await request(app)
+        .put('/v1/auth/store')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: `Updated Store Name ${randomSuffix}`,
+          address: 'Updated Store Address'
+        })
+        .expect(200);
+
+      expect(response.body.message).toBe('Informasi toko berhasil diperbarui');
+      expect(response.body.store.name).toBe(`Updated Store Name ${randomSuffix}`);
+    });
+
+    test('should return error for invalid business type', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `store_invalid_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Store Invalid User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register and login the user first
+      const registerResponse = await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      const token = registerResponse.body.token;
+
+      // Try to update with invalid business type
+      const response = await request(app)
+        .put('/v1/auth/store')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          business_type: 'INVALID_TYPE'
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('business_type must be one of');
+    });
+  });
 });

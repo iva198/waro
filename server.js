@@ -43,8 +43,8 @@ app.use((req, res, next) => {
 // Health check route (before auth middleware)
 app.use('/v1/health', healthRoutes);
 
-// Authentication middleware (to be implemented)
-// const { authenticateToken } = require('./middleware/auth');
+// Authentication middleware
+const { authenticateToken } = require('./middleware/auth');
 
 // Authentication routes (before auth middleware)
 app.use('/v1/auth', authRoutes);
