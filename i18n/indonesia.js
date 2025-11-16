@@ -83,6 +83,24 @@ const indonesia = {
     otp_expired: 'Kode OTP telah kadaluarsa',
     email_verification_failed: 'Verifikasi email gagal',
     invalid_verification_link: 'Tautan verifikasi tidak valid atau telah kadaluarsa'
+  },
+
+  // Subscription related
+  subscription: {
+    plans_fetched: 'Daftar paket langganan berhasil diambil',
+    plan_not_found: 'Paket langganan tidak ditemukan',
+    subscription_success: 'Berhasil berlangganan',
+    subscription_updated: 'Langganan berhasil diperbarui',
+    subscription_cancelled: 'Langganan berhasil dibatalkan',
+    subscription_error: 'Gagal memproses langganan',
+    invalid_plan: 'Paket tidak valid',
+    already_subscribed: 'Anda sudah memiliki langganan aktif',
+    insufficient_permissions: 'Izin tidak mencukupi untuk melakukan aksi ini',
+    max_cashiers_reached: 'Jumlah maksimum kasir telah tercapai',
+    max_stores_reached: 'Jumlah maksimum toko telah tercapai',
+    payment_required: 'Pembayaran diperlukan untuk paket ini',
+    billing_info_updated: 'Informasi pembayaran berhasil diperbarui',
+    invoice_generated: 'Faktur berhasil dibuat'
   }
 };
 

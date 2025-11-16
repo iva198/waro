@@ -19,6 +19,7 @@ const salesRoutes = require('./routes/sales');
 const paymentsRoutes = require('./routes/payments');
 const productsRoutes = require('./routes/products');
 const syncRoutes = require('./routes/sync');
+const subscriptionRoutes = require('./routes/subscription');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -54,6 +55,7 @@ app.use('/v1/sales', salesRoutes);
 app.use('/v1/payments', paymentsRoutes);
 app.use('/v1/products', productsRoutes);
 app.use('/v1/sync', syncRoutes);
+app.use('/v1/subscription', subscriptionRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

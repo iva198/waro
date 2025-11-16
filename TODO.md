@@ -143,9 +143,10 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 
 ## 🎯 Next Priority Tasks
 1. Complete account setup and user authentication (including forgot password, change password, and delete account features)
-2. Business type classification and onboarding process
+2. Business type classification and onboarding process with subscription management
 3. Recipe management for food service businesses (optional feature)
 4. Complete Payments API implementation
 5. Implement authentication middleware for protected routes
 6. Set up FCM for real-time notifications
 7. Create comprehensive logging system
+8. Complete smart login functionality (Google, phone+OTP, email+password)
