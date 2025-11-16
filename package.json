@@ -1,0 +1,39 @@
+{
+  "name": "waro-pos",
+  "version": "1.0.0",
+  "description": "WarO (Warung Online) POS System - Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development nodemon server.js",
+    "setup-db:live": "bash setup_db.sh live",
+    "setup-db:test": "bash setup_db.sh test",
+    "setup-db:test:reset": "bash setup_db.sh test --drop-first",
+    "migrate": "node ./migrate.js",
+    "test": "NODE_ENV=test jest",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "test:coverage": "NODE_ENV=test jest --coverage"
+  },
+  "keywords": [
+    "pos",
+    "payment",
+    "indonesia",
+    "qris",
+    "warung",
+    "umkm"
+  ],
+  "author": "WarO Team",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "nodemon": "^3.0.0",
+    "supertest": "^6.3.0"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "pg": "^8.8.0",
+    "dotenv": "^16.0.0",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0"
+  }
+}
