@@ -101,6 +101,27 @@ const indonesia = {
     payment_required: 'Pembayaran diperlukan untuk paket ini',
     billing_info_updated: 'Informasi pembayaran berhasil diperbarui',
     invoice_generated: 'Faktur berhasil dibuat'
+  },
+
+  // Inventory related
+  inventory: {
+    products_listed: 'Produk berhasil diambil',
+    product_created: 'Produk berhasil dibuat',
+    product_info: 'Informasi produk berhasil diambil',
+    product_updated: 'Produk berhasil diperbarui',
+    product_deleted: 'Produk berhasil dihapus',
+    operation_error: 'Gagal memproses operasi inventaris',
+    product_not_found: 'Produk tidak ditemukan',
+    invalid_format: 'Format tidak valid',
+    negative_stock_error: 'Stok tidak boleh negatif setelah penyesuaian',
+    stock_adjusted: 'Stok berhasil disesuaikan',
+    low_stock_listed: 'Produk dengan stok rendah berhasil diambil',
+    movements_listed: 'Pergerakan inventaris berhasil diambil',
+    max_cashiers_reached: 'Jumlah maksimal kasir telah tercapai',
+    max_stores_reached: 'Jumlah maksimal toko telah tercapai',
+    insufficient_permissions: 'Izin tidak mencukup untuk melakukan aksi ini',
+    already_subscribed: 'Anda sudah memiliki langganan aktif',
+    invalid_plan: 'Paket tidak valid'
   }
 };
 
