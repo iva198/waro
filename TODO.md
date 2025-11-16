@@ -142,7 +142,7 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 - **Tests Passing**: 25/25 (100%)
 
 ## 🎯 Next Priority Tasks
-1. Complete account setup and user authentication
+1. Complete account setup and user authentication (including forgot password, change password, and delete account features)
 2. Business type classification and onboarding process
 3. Recipe management for food service businesses (optional feature)
 4. Complete Payments API implementation

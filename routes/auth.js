@@ -1051,6 +1051,267 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+// POST /v1/auth/forgot-password - Send password reset instructions
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': email'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: req.t('validation.invalidFormat') + ': email'
+      });
+    }
+
+    // Check if user exists with this email
+    const userResult = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      // Return success even if email doesn't exist to prevent email enumeration
+      return res.json({
+        message: req.t('auth.password_reset_sent') || 'Password reset instructions sent to your email'
+      });
+    }
+
+    // Generate a random 6-digit code for password reset
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpires = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour from now
+
+    // Update user with password reset code
+    await query(
+      `UPDATE users SET
+         password_reset_code = $1,
+         password_reset_expires = $2
+       WHERE email = $3`,
+      [resetCode, resetExpires, email]
+    );
+
+    // In a real application, send an email to the user with reset instructions
+    // For now, we're just sending the code in the response (for testing purposes)
+    console.log(`Password reset code for ${email}: ${resetCode}`);
+
+    res.json({
+      message: req.t('auth.password_reset_sent') || 'Password reset instructions sent to your email'
+    });
+  } catch (error) {
+    console.error('Error sending password reset:', error);
+    res.status(500).json({
+      error: req.t('auth.login_error') || 'Failed to send password reset',
+      details: error.message
+    });
+  }
+});
+
+// POST /v1/auth/reset-password - Reset password with the reset code
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, new_password } = req.body;
+
+    if (!email || !code || !new_password) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': email, code, new_password'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: req.t('validation.invalidFormat') + ': email'
+      });
+    }
+
+    // Validate password strength
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        error: req.t('validation.mustBePositive') + ': password must be at least 6 characters'
+      });
+    }
+
+    // Check if reset code is valid and not expired
+    const userResult = await query(
+      `SELECT id FROM users
+       WHERE email = $1
+       AND password_reset_code = $2
+       AND password_reset_expires > NOW()`,
+      [email, code]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_verification_link') || 'Invalid or expired reset code'
+      });
+    }
+
+    const userId = userResult.rows[0].id;
+
+    // Hash the new password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(new_password, saltRounds);
+
+    // Update user password and clear reset fields
+    await query(
+      `UPDATE users SET
+         password_hash = $1,
+         password_reset_code = NULL,
+         password_reset_expires = NULL
+       WHERE id = $2`,
+      [hashedPassword, userId]
+    );
+
+    res.json({
+      message: req.t('auth.password_change_success') || 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({
+      error: req.t('auth.password_change_error') || 'Password reset failed',
+      details: error.message
+    });
+  }
+});
+
+// POST /v1/auth/change-password - Change password for logged in user
+router.post('/change-password', async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        error: req.t('validation.required') + ': current_password, new_password'
+      });
+    }
+
+    // Validate password strength
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        error: req.t('validation.mustBePositive') + ': new password must be at least 6 characters'
+      });
+    }
+
+    // Extract user info from token (assuming middleware that verifies token is in place)
+    // For now, let's assume we get the userId from the token
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Authentication required'
+      });
+    }
+
+    // Get the user's current password hash
+    const userResult = await query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Check if the user has a password (for password-based login)
+    if (!user.password_hash) {
+      return res.status(400).json({
+        error: req.t('auth.invalid_credentials') || 'No password set for this account'
+      });
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(current_password, user.password_hash);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Current password is incorrect'
+      });
+    }
+
+    // Hash the new password
+    const saltRounds = 10;
+    const hashedNewPassword = await bcrypt.hash(new_password, saltRounds);
+
+    // Update user password
+    await query(
+      `UPDATE users SET
+         password_hash = $1
+       WHERE id = $2`,
+      [hashedNewPassword, req.user.userId]
+    );
+
+    res.json({
+      message: req.t('auth.password_change_success') || 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({
+      error: req.t('auth.password_change_error') || 'Password change failed',
+      details: error.message
+    });
+  }
+});
+
+// DELETE /v1/auth/account - Delete user account
+router.delete('/account', async (req, res) => {
+  try {
+    // Extract user info from token (assuming middleware that verifies token is in place)
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        error: req.t('auth.invalid_credentials') || 'Authentication required'
+      });
+    }
+
+    // Get user's account information
+    const userResult = await query(
+      'SELECT id, email, full_name FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: req.t('auth.invalid_credentials') || 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // In a real application, you might want to verify the user's password before deletion
+    // For now, we'll proceed with the account deletion
+
+    // Delete user account (in a soft-delete approach or hard delete)
+    // First, soft delete or mark as deleted to preserve data integrity
+    await query(
+      `UPDATE users SET
+         status = 'DELETED',
+         deleted_at = NOW()
+       WHERE id = $1`,
+      [req.user.userId]
+    );
+
+    // You might also want to delete other related data (sales, transactions, etc.)
+    // For now, we'll just update the user status to DELETED
+
+    res.json({
+      message: req.t('auth.account_deleted') || 'Account has been deleted successfully. This action is irreversible.'
+    });
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    res.status(500).json({
+      error: req.t('auth.profile_error') || 'Account deletion failed',
+      details: error.message
+    });
+  }
+});
+
 // POST /v1/auth/email/verify - Verify email with the verification code
 router.post('/email/verify', async (req, res) => {
   try {

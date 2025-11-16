@@ -279,6 +279,66 @@ describe('Authentication API Endpoints', () => {
     });
   });
 
+  describe('POST /v1/auth/forgot-password', () => {
+    test('should send password reset instructions successfully', async () => {
+      const randomSuffix = Date.now() + Math.random().toString(36).substring(2, 10);
+      const newUser = {
+        email: `reset_${randomSuffix}@example.com`,
+        password: 'testpassword123',
+        full_name: `Reset User ${randomSuffix}`,
+        phone: `+62812345${String(Date.now()).slice(-6)}`, // Use time-based phone to ensure uniqueness
+        registration_method: 'email'
+      };
+
+      // Register the user first
+      await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(201);
+
+      // Request password reset
+      const response = await request(app)
+        .post('/v1/auth/forgot-password')
+        .send({
+          email: newUser.email
+        })
+        .expect(200);
+
+      expect(response.body.message).toBe('Instruksi reset password telah dikirim ke email Anda');
+    });
+
+    test('should return success even for non-existent email (to prevent enumeration)', async () => {
+      const response = await request(app)
+        .post('/v1/auth/forgot-password')
+        .send({
+          email: 'nonexistent@example.com'
+        })
+        .expect(200);
+
+      expect(response.body.message).toBe('Instruksi reset password telah dikirim ke email Anda');
+    });
+
+    test('should return 400 for invalid email', async () => {
+      const response = await request(app)
+        .post('/v1/auth/forgot-password')
+        .send({
+          email: 'invalid-email'
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('Format tidak valid: email');
+    });
+
+    test('should return 400 for missing email', async () => {
+      const response = await request(app)
+        .post('/v1/auth/forgot-password')
+        .send({})
+        .expect(400);
+
+      expect(response.body.error).toContain('Kolom ini wajib diisi');
+    });
+  });
+
   describe('POST /v1/auth/otp', () => {
     test('should send OTP to phone number', async () => {
       const phoneData = {
