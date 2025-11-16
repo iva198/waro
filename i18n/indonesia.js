@@ -50,6 +50,34 @@ const indonesia = {
   database: {
     connectionError: 'Gagal terhubung ke database',
     queryError: 'Gagal menjalankan query database'
+  },
+
+  // Authentication related
+  auth: {
+    register_success: 'Pendaftaran berhasil',
+    login_success: 'Login berhasil',
+    email_exists: 'Email sudah terdaftar',
+    username_exists: 'Username sudah digunakan',
+    phone_exists: 'Nomor telepon sudah terdaftar',
+    invalid_credentials: 'Email, username, atau password salah',
+    account_inactive: 'Akun tidak aktif',
+    register_error: 'Gagal mendaftar',
+    login_error: 'Gagal login',
+    profile_info: 'Informasi profil',
+    profile_error: 'Gagal mengambil profil',
+    password_change_success: 'Password berhasil diubah',
+    password_change_error: 'Gagal mengubah password',
+    phone_verification_sent: 'Kode verifikasi telah dikirim ke nomor Anda',
+    email_verification_sent: 'Kode verifikasi telah dikirim ke email Anda',
+    invalid_verification_code: 'Kode verifikasi tidak valid atau telah kadaluarsa',
+    phone_verified: 'Nomor telepon berhasil diverifikasi',
+    email_verified: 'Email berhasil diverifikasi',
+    google_login_failed: 'Gagal login dengan Google',
+    otp_sent: 'Kode OTP telah dikirim',
+    invalid_otp: 'Kode OTP tidak valid',
+    otp_expired: 'Kode OTP telah kadaluarsa',
+    email_verification_failed: 'Verifikasi email gagal',
+    invalid_verification_link: 'Tautan verifikasi tidak valid atau telah kadaluarsa'
   }
 };
 

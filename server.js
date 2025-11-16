@@ -14,6 +14,7 @@ const { detectLanguage } = require('./utils/i18n');
 
 // Import routes
 const healthRoutes = require('./routes/health');
+const authRoutes = require('./routes/auth');
 const salesRoutes = require('./routes/sales');
 const paymentsRoutes = require('./routes/payments');
 const productsRoutes = require('./routes/products');
@@ -44,6 +45,9 @@ app.use('/v1/health', healthRoutes);
 
 // Authentication middleware (to be implemented)
 // const { authenticateToken } = require('./middleware/auth');
+
+// Authentication routes (before auth middleware)
+app.use('/v1/auth', authRoutes);
 
 // API routes
 app.use('/v1/sales', salesRoutes);

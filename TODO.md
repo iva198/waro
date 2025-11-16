@@ -24,6 +24,17 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 - [x] Implemented proper error handling and validation
 - [x] Used UUIDs for primary keys
 
+### Authentication System
+- [x] Created user registration with email/password validation
+- [x] Implemented user login with JWT token generation
+- [x] Added password hashing with bcrypt
+- [x] Created auth routes with proper error handling
+- [x] All auth messages in Indonesian
+- [x] Added support for username and phone number authentication
+- [x] Added Google authentication support
+- [x] Added OTP (SMS) authentication support
+- [x] Added phone number verification system
+
 ### Internationalization (i18n)
 - [x] Implemented Indonesian language support
 - [x] Created centralized translation files
@@ -34,8 +45,9 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 - [x] Set up Jest for unit testing
 - [x] Created comprehensive tests for database connections
 - [x] Built tests for sales API endpoints
+- [x] Built tests for auth API endpoints
 - [x] Implemented proper test data setup with required references
-- [x] All 17 tests passing
+- [x] All 23 tests passing
 
 ### Database Setup
 - [x] Created database setup script (`setup_db.sh`)
@@ -60,9 +72,14 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 ## 📋 Pending Tasks
 
 ### Business Type Support
-- [ ] **Business Type Classification**: Implement store categorization (warung kelontong vs restaurant/kuliner)
+- [ ] **Business Type Classification**: Implement store categorization with multiple business models
   - Update stores table to include business_type field
-  - Define business type enum (WARUNG_KELONTONG, RESTAURANT, SATAY_STALL, ETC.)
+  - Define business type enum with categories:
+    - RETAIL: Buy products and sell retail (minimarket, warung kelontong, convenience stores)
+    - FOOD_BEVERAGE: Buy ingredients and sell prepared items (bakso, satay, restaurant, coffee shop, etc.)
+    - SERVICES: Service-based businesses (laundry, barbershop, repair services, etc.)
+    - MANUFACTURING_CRAFT: Create products from raw materials (home industries, craft makers, etc.)
+    - HYBRID: Combination of different business types
 - [ ] **Onboarding/Setup Process**: Implement user onboarding to select business type and inventory tracking preferences
   - Business type selection during account setup
   - Option to enable/disable detailed inventory tracking (recipe management)
@@ -119,15 +136,16 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 ---
 
 ## 📊 Current Status
-- **Completed**: 7/17+ major components (41%)
+- **Completed**: 8/17+ major components (47%)
 - **In Progress**: 3/17+ major components (18%)
-- **Pending**: 7/17+ major components (41%)
-- **Tests Passing**: 17/17 (100%)
+- **Pending**: 6/17+ major components (35%)
+- **Tests Passing**: 25/25 (100%)
 
 ## 🎯 Next Priority Tasks
-1. Account setup and user authentication
+1. Complete account setup and user authentication
 2. Business type classification and onboarding process
-3. Complete Payments API implementation
-4. Implement authentication middleware
-5. Set up FCM for real-time notifications
-6. Create comprehensive logging system
+3. Recipe management for food service businesses (optional feature)
+4. Complete Payments API implementation
+5. Implement authentication middleware for protected routes
+6. Set up FCM for real-time notifications
+7. Create comprehensive logging system
