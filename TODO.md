@@ -136,16 +136,17 @@ This document tracks the progress and remaining tasks for the WarO (Warung Onlin
 ---
 
 ## 📊 Current Status
-- **Completed**: 11/17+ major components (65%)
+- **Completed**: 13/17+ major components (76%)
 - **In Progress**: 1/17+ major components (6%)
-- **Pending**: 5/17+ major components (29%)
+- **Pending**: 3/17+ major components (18%)
 - **Tests Passing**: 52/52 (100%)
 
 ## 🎯 Next Priority Tasks
 1. Complete account setup and user authentication (including forgot password, change password, and delete account features)
 2. Business type classification and onboarding process with subscription management
-3. Recipe management for food service businesses (optional feature)
-4. Complete Payments API implementation
-5. Implement authentication middleware for protected routes
-6. Set up FCM for real-time notifications
-7. Create comprehensive logging system
+3. Implement currency redenomination support (1000:1 ratio to prepare for government redenomination - 1000 IDR -> 1 IDR, 500 -> 0.5 IDR, etc.)
+4. Recipe management for food service businesses (optional feature)
+5. Complete Payments API implementation
+6. Implement authentication middleware for protected routes
+7. Set up FCM for real-time notifications
+8. Create comprehensive logging system
