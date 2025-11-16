@@ -122,6 +122,25 @@ const indonesia = {
     insufficient_permissions: 'Izin tidak mencukup untuk melakukan aksi ini',
     already_subscribed: 'Anda sudah memiliki langganan aktif',
     invalid_plan: 'Paket tidak valid'
+  },
+
+  // Product types related
+  product_type: {
+    finished_good: 'Barang Jadi',
+    raw_material: 'Bahan Mentah',
+    component: 'Komponen',
+    service: 'Layanan'
+  },
+
+  // Product categories related
+  product_category: {
+    food: 'Makanan',
+    beverage: 'Minuman',
+    consumer_goods: 'Barang Konsumen',
+    raw_materials: 'Bahan Mentah',
+    packaging: 'Kemasan',
+    service: 'Layanan',
+    other: 'Lainnya'
   }
 };
 

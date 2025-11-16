@@ -83,21 +83,31 @@ router.post('/products', authenticateToken, async (req, res) => {
 
     const tenantId = userResult.rows[0].tenant_id;
 
+    // Determine whether it's a raw material (ingredient) or finished good based on category
+    let productType = 'FINISHED_GOOD';
+    if (category && (category.includes('RAW') || category.includes('INGREDIENT'))) {
+      productType = 'RAW_MATERIAL';
+    } else if (category && category.includes('COMPONENT')) {
+      productType = 'COMPONENT';
+    } else if (category && category.includes('SERVICE')) {
+      productType = 'SERVICE';
+    }
+
     // Create the product
     const productResult = await query(
       `INSERT INTO products (
-         id, tenant_id, sku, name, barcode, category, uom, 
+         id, tenant_id, sku, name, barcode, category, product_type, uom,
          price_cents, cost_cents, tax_rate, stock_quantity,
          min_stock_threshold, max_stock_threshold, supplier_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING id, sku, name, barcode, category, uom, 
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id, sku, name, barcode, category, product_type, uom,
                 price_cents, cost_cents, tax_rate, stock_quantity,
                 min_stock_threshold, max_stock_threshold, supplier_id, created_at, updated_at`,
       [
-        uuidv4(), tenantId, sku || null, name, barcode || null, category || 'OTHER', 
-        uom || 'pcs', price_cents, cost_cents || null, 
+        uuidv4(), tenantId, sku || null, name, barcode || null, category || 'OTHER',
+        productType, uom || 'pcs', price_cents, cost_cents || null,
         tax_rate || 0, 0, // Initial stock quantity is 0
-        min_stock_threshold || 0, max_stock_threshold || null, 
+        min_stock_threshold || 0, max_stock_threshold || null,
         supplier_id || null
       ]
     );
